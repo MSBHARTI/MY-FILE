@@ -1,0 +1,1284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>File Manager</title>
+<style>
+  :root{
+    --bg:#f4f6f9;
+    --surface:#ffffff;
+    --border:#e2e5eb;
+    --text:#1f2430;
+    --text-muted:#6b7280;
+    --accent:#4f6df5;
+    --accent-hover:#3d59e0;
+    --danger:#e5484d;
+    --star:#f5b940;
+    --radius:10px;
+    --shadow:0 2px 10px rgba(20,25,40,0.06);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);
+    color:var(--text);
+  }
+
+  /* ---------- Top bar ---------- */
+  header{
+    background:var(--surface);
+    border-bottom:1px solid var(--border);
+    padding:12px 16px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    position:sticky;
+    top:0;
+    z-index:50;
+  }
+  .brand{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-weight:700;
+    font-size:18px;
+  }
+  .brand svg{flex-shrink:0;}
+
+  .search-box{
+    flex:1;
+    max-width:420px;
+    display:flex;
+    align-items:center;
+    background:var(--bg);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:6px 10px;
+    gap:6px;
+  }
+  .search-box input{
+    border:none;
+    background:transparent;
+    outline:none;
+    width:100%;
+    font-size:14px;
+    color:var(--text);
+  }
+
+  .hamburger-btn{
+    display:none;
+    background:none;
+    border:1px solid var(--border);
+    border-radius:8px;
+    width:38px;
+    height:38px;
+    align-items:center;
+    justify-content:center;
+    cursor:pointer;
+  }
+  .hamburger-btn:hover{background:var(--bg);}
+
+  /* ---------- Layout ---------- */
+  .app{
+    display:flex;
+    min-height:calc(100vh - 61px);
+  }
+
+  /* Sidebar / menu */
+  .sidebar{
+    width:230px;
+    background:var(--surface);
+    border-right:1px solid var(--border);
+    padding:16px 12px;
+    flex-shrink:0;
+  }
+  .menu-section{margin-bottom:20px;}
+  .menu-section h4{
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:.05em;
+    color:var(--text-muted);
+    margin:0 0 8px 6px;
+  }
+  .menu-item{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:9px 10px;
+    border-radius:8px;
+    cursor:pointer;
+    font-size:14px;
+    color:var(--text);
+    user-select:none;
+  }
+  .menu-item:hover{background:var(--bg);}
+  .menu-item.active{background:#eef1ff;color:var(--accent);font-weight:600;}
+  .menu-item svg{flex-shrink:0;}
+
+  .sort-select, .btn-full{
+    width:100%;
+    padding:8px 10px;
+    border-radius:8px;
+    border:1px solid var(--border);
+    background:var(--bg);
+    font-size:13px;
+    color:var(--text);
+    cursor:pointer;
+  }
+
+  .btn{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    padding:8px 14px;
+    border-radius:8px;
+    border:1px solid var(--border);
+    background:var(--surface);
+    color:var(--text);
+    font-size:13px;
+    cursor:pointer;
+  }
+  .btn:hover{background:var(--bg);}
+  .btn-primary{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .btn-primary:hover{background:var(--accent-hover);}
+  .btn-danger{color:var(--danger);border-color:#f6c9ca;}
+  .btn-danger:hover{background:#fdeeee;}
+
+  /* ---------- Main content ---------- */
+  main{
+    flex:1;
+    padding:20px 24px;
+    min-width:0;
+  }
+  .toolbar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    margin-bottom:14px;
+    flex-wrap:wrap;
+  }
+  .breadcrumbs{
+    font-size:14px;
+    color:var(--text-muted);
+    display:flex;
+    align-items:center;
+    gap:6px;
+    flex-wrap:wrap;
+  }
+  .breadcrumbs span{cursor:pointer;}
+  .breadcrumbs span:hover{color:var(--accent);}
+  .breadcrumbs .sep{color:#c7cbd4;cursor:default;}
+
+  .toolbar-actions{display:flex;gap:8px;flex-wrap:wrap;}
+
+  /* Main content acts as the drop target - Explorer style (no visible dropzone) */
+  main.dragover{
+    outline:2px dashed var(--accent);
+    outline-offset:-6px;
+    background:#f7f8ff;
+    border-radius:var(--radius);
+  }
+  .drop-hint{
+    display:none;
+    position:fixed;
+    top:70px;
+    left:50%;
+    transform:translateX(-50%);
+    background:var(--accent);
+    color:#fff;
+    padding:8px 16px;
+    border-radius:20px;
+    font-size:13px;
+    z-index:150;
+    box-shadow:var(--shadow);
+  }
+  .drop-hint.show{display:block;}
+
+  /* File grid */
+  .file-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(140px,1fr));
+    gap:14px;
+  }
+  .file-card{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:14px 10px 10px;
+    text-align:center;
+    position:relative;
+    cursor:pointer;
+    transition:box-shadow .15s, border-color .15s;
+  }
+  .file-card:hover{box-shadow:var(--shadow);border-color:#d7dcf0;}
+  .file-card .icon{font-size:34px;margin-bottom:8px;}
+  .file-card .name{
+    font-size:13px;
+    font-weight:500;
+    word-break:break-word;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    display:-webkit-box;
+    -webkit-line-clamp:2;
+    -webkit-box-orient:vertical;
+  }
+  .file-card .meta{font-size:11px;color:var(--text-muted);margin-top:3px;}
+
+  .star-btn{
+    position:absolute;
+    top:6px;
+    right:6px;
+    background:none;
+    border:none;
+    font-size:16px;
+    cursor:pointer;
+    color:#d3d7e0;
+    line-height:1;
+    padding:2px;
+  }
+  .star-btn.starred{color:var(--star);}
+
+  .card-menu-btn{
+    position:absolute;
+    top:6px;
+    left:6px;
+    background:none;
+    border:none;
+    font-size:14px;
+    cursor:pointer;
+    color:#b7bcc9;
+    padding:2px 4px;
+    border-radius:4px;
+  }
+  .card-menu-btn:hover{background:var(--bg);color:var(--text);}
+
+  .btn-sm{padding:5px 8px;font-size:11px;}
+  .card-actions{
+    display:flex;
+    gap:6px;
+    justify-content:center;
+    margin-top:8px;
+  }
+  .lock-tag{
+    color:var(--accent);
+    font-weight:600;
+  }
+
+  .empty-state{
+    text-align:center;
+    padding:60px 20px;
+    color:var(--text-muted);
+  }
+  .empty-state .icon{font-size:44px;margin-bottom:10px;}
+
+  /* Context dropdown for card actions */
+  .dropdown{
+    position:absolute;
+    z-index:100;
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:8px;
+    box-shadow:var(--shadow);
+    min-width:140px;
+    overflow:hidden;
+  }
+  .dropdown button{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    width:100%;
+    text-align:left;
+    padding:9px 12px;
+    background:none;
+    border:none;
+    font-size:13px;
+    cursor:pointer;
+    color:var(--text);
+  }
+  .dropdown button:hover{background:var(--bg);}
+  .dropdown button.danger{color:var(--danger);}
+
+  /* Overlay for mobile sidebar */
+  .overlay{
+    display:none;
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,.35);
+    z-index:60;
+  }
+
+  /* Modal */
+  .modal-backdrop{
+    display:none;
+    position:fixed;
+    inset:0;
+    background:rgba(15,18,30,.45);
+    align-items:center;
+    justify-content:center;
+    z-index:200;
+    padding:16px;
+  }
+  .modal-backdrop.show{display:flex;}
+  .modal{
+    background:var(--surface);
+    border-radius:12px;
+    padding:20px;
+    width:100%;
+    max-width:340px;
+  }
+  .modal h3{margin:0 0 14px;font-size:16px;}
+  .modal input[type=text]{
+    width:100%;
+    padding:9px 10px;
+    border:1px solid var(--border);
+    border-radius:8px;
+    font-size:14px;
+    outline:none;
+  }
+  .modal input[type=text]:focus, .modal input[type=password]:focus{border-color:var(--accent);}
+  .modal input[type=password]{
+    width:100%;
+    padding:9px 10px;
+    border:1px solid var(--border);
+    border-radius:8px;
+    font-size:14px;
+    outline:none;
+  }
+  .modal .hint{font-size:12px;color:var(--text-muted);margin-top:8px;line-height:1.4;}
+  .modal-actions{
+    display:flex;
+    justify-content:flex-end;
+    gap:8px;
+    margin-top:16px;
+  }
+
+  .toast{
+    position:fixed;
+    bottom:20px;
+    left:50%;
+    transform:translateX(-50%);
+    background:#1f2430;
+    color:#fff;
+    padding:10px 18px;
+    border-radius:8px;
+    font-size:13px;
+    z-index:300;
+    opacity:0;
+    pointer-events:none;
+    transition:opacity .2s, transform .2s;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(-6px);}
+
+  input[type=file]{display:none;}
+
+  /* ---------- Mobile ---------- */
+  @media (max-width: 768px){
+    .hamburger-btn{display:inline-flex;}
+    .search-box{max-width:none;}
+    .sidebar{
+      position:fixed;
+      top:0;
+      left:0;
+      height:100%;
+      transform:translateX(-100%);
+      transition:transform .2s ease;
+      z-index:70;
+      box-shadow:2px 0 12px rgba(0,0,0,.15);
+    }
+    .sidebar.open{transform:translateX(0);}
+    .overlay.show{display:block;}
+    main{padding:14px;}
+    .toolbar{flex-direction:column;align-items:stretch;}
+    .toolbar-actions{justify-content:flex-start;}
+    .file-grid{grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <button class="hamburger-btn" id="hamburgerBtn" title="Menu">☰</button>
+  <div class="brand">📁 <span>File Manager</span></div>
+  <div class="search-box">
+    <span>🔍</span>
+    <input type="text" id="searchInput" placeholder="Search files and folders...">
+  </div>
+  <button class="btn btn-primary" id="newFolderBtn">+ Folder</button>
+</header>
+
+<div class="overlay" id="overlay"></div>
+<div class="drop-hint" id="dropHint">Drop to add to this folder</div>
+
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="menu-section">
+      <h4>Views</h4>
+      <div class="menu-item active" data-view="all"><span>🗂️</span> All Files</div>
+      <div class="menu-item" data-view="favorites"><span>⭐</span> Favorites</div>
+      <div class="menu-item" data-view="trash"><span>🗑️</span> Recycle Bin</div>
+    </div>
+
+    <div class="menu-section">
+      <h4>Sort By</h4>
+      <select class="sort-select" id="sortSelect">
+        <option value="name-asc">Name (A → Z)</option>
+        <option value="name-desc">Name (Z → A)</option>
+        <option value="date-new">Date (Newest)</option>
+        <option value="date-old">Date (Oldest)</option>
+      </select>
+    </div>
+
+    <div class="menu-section">
+      <h4>Upload</h4>
+      <button class="btn-full" id="uploadBtnMenu" style="margin-bottom:8px;">📄 Upload File(s)</button>
+      <button class="btn-full" id="uploadFolderBtnMenu">📁 Upload Folder</button>
+      <input type="file" id="fileInput" multiple>
+      <input type="file" id="folderInput" webkitdirectory directory multiple>
+    </div>
+
+    <div class="menu-section">
+      <h4>Storage</h4>
+      <div style="font-size:12px;color:var(--text-muted);" id="storageInfo">0 items</div>
+    </div>
+  </aside>
+
+  <main>
+    <div class="toolbar">
+      <div class="breadcrumbs" id="breadcrumbs"></div>
+      <div class="toolbar-actions" id="uploadActions">
+        <button class="btn" id="uploadBtnTop">📤 Upload</button>
+        <button class="btn" id="uploadFolderBtnTop">📁 Upload Folder</button>
+      </div>
+      <div class="toolbar-actions" id="trashActions" style="display:none;">
+        <button class="btn btn-danger" id="emptyTrashBtn">🗑️ Empty Recycle Bin</button>
+      </div>
+    </div>
+
+    <div id="gridContainer"></div>
+  </main>
+</div>
+
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal">
+    <h3 id="modalTitle">New Folder</h3>
+    <input type="text" id="modalInput" placeholder="Enter name">
+    <div class="modal-actions">
+      <button class="btn" id="modalCancel">Cancel</button>
+      <button class="btn btn-primary" id="modalConfirm">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="passwordModalBackdrop">
+  <div class="modal">
+    <h3 id="passwordModalTitle">Set Password</h3>
+    <input type="password" id="passwordModalInput" placeholder="Password" autocomplete="new-password">
+    <input type="password" id="passwordModalInput2" placeholder="Confirm password" autocomplete="new-password" style="margin-top:8px;">
+    <div class="hint" id="passwordModalHint"></div>
+    <div class="modal-actions">
+      <button class="btn" id="passwordModalCancel">Cancel</button>
+      <button class="btn btn-primary" id="passwordModalConfirm">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  const STORAGE_KEY = "fm_items_v1";
+  const FAV_KEY = "fm_favorites_v1";
+
+  /* ---------- State ---------- */
+  let items = loadItems();          // flat array of {id, name, type, parentId, date, size, starred, password?, deleted?, deletedAt?}
+  let favorites = loadFavorites();  // set of ids (kept in sync with items[].starred too)
+  let currentFolder = null;         // null = root
+  let currentView = "all";          // "all" | "favorites" | "trash"
+  let sortMode = "name-asc";
+  let searchTerm = "";
+
+  function isDeleted(id){
+    const it = items.find(i=>i.id===id);
+    return it ? !!it.deleted : false;
+  }
+
+  function switchToAllView(){
+    currentView = "all";
+    document.querySelectorAll(".menu-item").forEach(m=>m.classList.remove("active"));
+    document.querySelector('.menu-item[data-view="all"]').classList.add("active");
+  }
+
+  /* ---------- Persistence ---------- */
+  function loadItems(){
+    try{
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if(raw) return JSON.parse(raw);
+    }catch(e){}
+    // seed with a couple of example folders on first run
+    return [
+      {id:"f1",name:"Documents",type:"folder",parentId:null,date:Date.now()-864000000,starred:false},
+      {id:"f2",name:"Photos",type:"folder",parentId:null,date:Date.now()-604800000,starred:true},
+    ];
+  }
+  function loadFavorites(){
+    try{
+      const raw = localStorage.getItem(FAV_KEY);
+      if(raw) return new Set(JSON.parse(raw));
+    }catch(e){}
+    return new Set(items.filter(i=>i.starred).map(i=>i.id));
+  }
+  function saveAll(){
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+    localStorage.setItem(FAV_KEY, JSON.stringify([...favorites]));
+  }
+
+  /* ---------- Helpers ---------- */
+  function uid(){ return "id_" + Math.random().toString(36).slice(2,10); }
+  function fmtDate(ts){
+    const d = new Date(ts);
+    return d.toLocaleDateString(undefined,{year:"numeric",month:"short",day:"numeric"});
+  }
+  function fmtSize(bytes){
+    if(!bytes && bytes !== 0) return "";
+    if(bytes < 1024) return bytes + " B";
+    if(bytes < 1024*1024) return (bytes/1024).toFixed(1) + " KB";
+    return (bytes/(1024*1024)).toFixed(1) + " MB";
+  }
+  function iconFor(item){
+    if(item.type === "folder") return "📁";
+    const ext = (item.name.split(".").pop() || "").toLowerCase();
+    const map = {
+      pdf:"📕", doc:"📄", docx:"📄", txt:"📄", md:"📄",
+      xls:"📊", xlsx:"📊", csv:"📊",
+      ppt:"📙", pptx:"📙",
+      jpg:"🖼️", jpeg:"🖼️", png:"🖼️", gif:"🖼️", svg:"🖼️", webp:"🖼️",
+      mp3:"🎵", wav:"🎵",
+      mp4:"🎬", mov:"🎬", avi:"🎬",
+      zip:"🗜️", rar:"🗜️",
+      js:"💻", html:"💻", css:"💻", py:"💻", json:"💻"
+    };
+    return map[ext] || "📄";
+  }
+  function toast(msg){
+    const t = document.getElementById("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    clearTimeout(toast._timer);
+    toast._timer = setTimeout(()=>t.classList.remove("show"), 1800);
+  }
+
+  /* ---------- Core rendering ---------- */
+  const gridContainer = document.getElementById("gridContainer");
+  const breadcrumbsEl = document.getElementById("breadcrumbs");
+  const storageInfo = document.getElementById("storageInfo");
+
+  function getChildren(parentId){
+    return items.filter(i => i.parentId === parentId && !i.deleted);
+  }
+
+  function getPathTo(folderId){
+    const path = [];
+    let cur = folderId;
+    while(cur){
+      const folder = items.find(i => i.id === cur);
+      if(!folder) break;
+      path.unshift(folder);
+      cur = folder.parentId;
+    }
+    return path;
+  }
+
+  function applySort(list){
+    const sorted = [...list];
+    switch(sortMode){
+      case "name-asc":
+        sorted.sort((a,b)=> a.name.localeCompare(b.name));
+        break;
+      case "name-desc":
+        sorted.sort((a,b)=> b.name.localeCompare(a.name));
+        break;
+      case "date-new":
+        sorted.sort((a,b)=> b.date - a.date);
+        break;
+      case "date-old":
+        sorted.sort((a,b)=> a.date - b.date);
+        break;
+    }
+    // folders first within any sort mode, for tidiness
+    sorted.sort((a,b)=> (a.type === b.type) ? 0 : (a.type === "folder" ? -1 : 1));
+    return sorted;
+  }
+
+  function currentList(){
+    let list;
+    if(currentView === "favorites"){
+      list = items.filter(i => favorites.has(i.id) && !i.deleted);
+    } else if(currentView === "trash"){
+      // show only the top-level trashed item of each deletion (a deleted folder
+      // hides its own deleted contents so it appears as a single bin entry)
+      list = items.filter(i => i.deleted && (i.parentId === null || !isDeleted(i.parentId)));
+    } else {
+      list = getChildren(currentFolder);
+    }
+    if(searchTerm.trim()){
+      const term = searchTerm.trim().toLowerCase();
+      if(currentView === "all"){
+        // search within whole (non-deleted) tree when a term is typed, for convenience
+        list = items.filter(i => !i.deleted && i.name.toLowerCase().includes(term));
+      } else {
+        list = list.filter(i => i.name.toLowerCase().includes(term));
+      }
+    }
+    return applySort(list);
+  }
+
+  function renderBreadcrumbs(){
+    breadcrumbsEl.innerHTML = "";
+    if(currentView === "favorites"){
+      breadcrumbsEl.innerHTML = "<span>⭐ Favorites</span>";
+      return;
+    }
+    if(currentView === "trash"){
+      breadcrumbsEl.innerHTML = "<span>🗑️ Recycle Bin</span>";
+      return;
+    }
+    const rootSpan = document.createElement("span");
+    rootSpan.textContent = "🏠 Home";
+    rootSpan.onclick = () => { currentFolder = null; render(); };
+    breadcrumbsEl.appendChild(rootSpan);
+
+    const path = getPathTo(currentFolder);
+    path.forEach(folder=>{
+      const sep = document.createElement("span");
+      sep.className = "sep";
+      sep.textContent = "›";
+      breadcrumbsEl.appendChild(sep);
+
+      const span = document.createElement("span");
+      span.textContent = folder.name;
+      span.onclick = () => { currentFolder = folder.id; render(); };
+      breadcrumbsEl.appendChild(span);
+    });
+  }
+
+  function closeAnyDropdown(){
+    const existing = document.querySelector(".dropdown");
+    if(existing) existing.remove();
+  }
+
+  function renderGrid(){
+    const list = currentList();
+    gridContainer.innerHTML = "";
+
+    if(list.length === 0){
+      const empty = document.createElement("div");
+      empty.className = "empty-state";
+      if(currentView === "favorites"){
+        empty.innerHTML = `<div class="icon">⭐</div><div>No favorites yet. Star files or folders to see them here.</div>`;
+      } else if(currentView === "trash"){
+        empty.innerHTML = `<div class="icon">🗑️</div><div>Recycle Bin is empty.</div>`;
+      } else if(searchTerm.trim()){
+        empty.innerHTML = `<div class="icon">🔍</div><div>No results for "${escapeHtml(searchTerm)}"</div>`;
+      } else {
+        empty.innerHTML = `<div class="icon">📭</div><div>This folder is empty. Upload a file or create a folder.</div>`;
+      }
+      gridContainer.appendChild(empty);
+      return;
+    }
+
+    const grid = document.createElement("div");
+    grid.className = "file-grid";
+
+    list.forEach(item=>{
+      const card = document.createElement("div");
+      card.className = "file-card";
+
+      /* ---- Recycle Bin cards: Restore / Delete Permanently ---- */
+      if(currentView === "trash"){
+        const icon = document.createElement("div");
+        icon.className = "icon";
+        icon.textContent = iconFor(item);
+
+        const name = document.createElement("div");
+        name.className = "name";
+        name.textContent = item.name;
+
+        const meta = document.createElement("div");
+        meta.className = "meta";
+        meta.textContent = "Deleted " + fmtDate(item.deletedAt || item.date);
+
+        const actions = document.createElement("div");
+        actions.className = "card-actions";
+
+        const restoreBtn = document.createElement("button");
+        restoreBtn.className = "btn btn-sm";
+        restoreBtn.textContent = "↩️ Restore";
+        restoreBtn.onclick = (e)=>{ e.stopPropagation(); restoreItem(item.id); };
+
+        const wipeBtn = document.createElement("button");
+        wipeBtn.className = "btn btn-danger btn-sm";
+        wipeBtn.textContent = "Delete";
+        wipeBtn.onclick = (e)=>{ e.stopPropagation(); permanentDelete(item.id); };
+
+        actions.appendChild(restoreBtn);
+        actions.appendChild(wipeBtn);
+
+        card.appendChild(icon);
+        card.appendChild(name);
+        card.appendChild(meta);
+        card.appendChild(actions);
+        grid.appendChild(card);
+        return;
+      }
+
+      const menuBtn = document.createElement("button");
+      menuBtn.className = "card-menu-btn";
+      menuBtn.textContent = "⋯";
+      menuBtn.title = "Actions";
+      menuBtn.onclick = (e)=>{
+        e.stopPropagation();
+        showCardMenu(e.currentTarget, item);
+      };
+
+      const starBtn = document.createElement("button");
+      starBtn.className = "star-btn" + (favorites.has(item.id) ? " starred" : "");
+      starBtn.textContent = favorites.has(item.id) ? "★" : "☆";
+      starBtn.title = "Toggle favorite";
+      starBtn.onclick = (e)=>{
+        e.stopPropagation();
+        toggleFavorite(item.id);
+      };
+
+      const icon = document.createElement("div");
+      icon.className = "icon";
+      icon.textContent = iconFor(item);
+
+      const name = document.createElement("div");
+      name.className = "name";
+      name.textContent = (item.type === "folder" && item.password ? "🔒 " : "") + item.name;
+      if(item.type === "folder" && item.password) name.title = "Password protected";
+
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      meta.textContent = item.type === "folder"
+        ? fmtDate(item.date)
+        : `${fmtSize(item.size)} · ${fmtDate(item.date)}`;
+
+      card.appendChild(menuBtn);
+      card.appendChild(starBtn);
+      card.appendChild(icon);
+      card.appendChild(name);
+      card.appendChild(meta);
+
+      card.onclick = ()=>{
+        if(item.type === "folder"){
+          currentView = "all";
+          document.querySelectorAll(".menu-item").forEach(m=>m.classList.remove("active"));
+          document.querySelector('.menu-item[data-view="all"]').classList.add("active");
+          currentFolder = item.id;
+          render();
+        }
+      };
+
+      grid.appendChild(card);
+    });
+
+    gridContainer.appendChild(grid);
+  }
+
+  function escapeHtml(str){
+    const div = document.createElement("div");
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function showCardMenu(anchorBtn, item){
+    closeAnyDropdown();
+    const dropdown = document.createElement("div");
+    dropdown.className = "dropdown";
+
+    const renameBtn = document.createElement("button");
+    renameBtn.innerHTML = "✏️ Rename";
+    renameBtn.onclick = ()=>{ closeAnyDropdown(); openRenameModal(item); };
+
+    const favBtn = document.createElement("button");
+    favBtn.innerHTML = favorites.has(item.id) ? "★ Unfavorite" : "☆ Favorite";
+    favBtn.onclick = ()=>{ closeAnyDropdown(); toggleFavorite(item.id); };
+
+    const delBtn = document.createElement("button");
+    delBtn.className = "danger";
+    delBtn.innerHTML = "🗑️ Delete";
+    delBtn.onclick = ()=>{ closeAnyDropdown(); moveToTrash(item.id); };
+
+    dropdown.appendChild(renameBtn);
+
+    if(item.type === "folder"){
+      const pwBtn = document.createElement("button");
+      if(item.password){
+        pwBtn.innerHTML = "🔓 Remove Password";
+        pwBtn.onclick = ()=>{
+          closeAnyDropdown();
+          openPasswordModal("remove", item, null, "Enter the current password to remove protection from this folder.");
+        };
+      } else {
+        pwBtn.innerHTML = "🔒 Set Password";
+        pwBtn.onclick = ()=>{
+          closeAnyDropdown();
+          openPasswordModal("set", item, null, "This folder won't be deletable without this password.");
+        };
+      }
+      dropdown.appendChild(pwBtn);
+    }
+
+    dropdown.appendChild(favBtn);
+    dropdown.appendChild(delBtn);
+    document.body.appendChild(dropdown);
+
+    const rect = anchorBtn.getBoundingClientRect();
+    dropdown.style.top = (rect.bottom + window.scrollY + 4) + "px";
+    dropdown.style.left = (rect.left + window.scrollX) + "px";
+
+    setTimeout(()=>{
+      document.addEventListener("click", closeAnyDropdown, {once:true});
+    },0);
+  }
+
+  function toggleFavorite(id){
+    const item = items.find(i=>i.id === id);
+    if(!item) return;
+    if(favorites.has(id)){
+      favorites.delete(id);
+      item.starred = false;
+    } else {
+      favorites.add(id);
+      item.starred = true;
+    }
+    saveAll();
+    render();
+  }
+
+  function collectWithDescendants(id){
+    const set = new Set([id]);
+    let changed = true;
+    while(changed){
+      changed = false;
+      items.forEach(i=>{
+        if(i.parentId && set.has(i.parentId) && !set.has(i.id)){
+          set.add(i.id);
+          changed = true;
+        }
+      });
+    }
+    return set;
+  }
+
+  function moveToTrash(id){
+    const item = items.find(i=>i.id === id);
+    if(!item) return;
+
+    const doTrash = ()=>{
+      const ids = collectWithDescendants(id);
+      const now = Date.now();
+      ids.forEach(tid=>{
+        const it = items.find(i=>i.id===tid);
+        if(it && !it.deleted){ it.deleted = true; it.deletedAt = now; }
+      });
+      saveAll();
+      toast("Moved to Recycle Bin");
+      render();
+    };
+
+    if(item.type === "folder" && item.password){
+      openPasswordModal("verify", item, doTrash, "This folder is password protected. Enter the password to delete it.");
+      return;
+    }
+    if(!confirm(`Move "${item.name}" to Recycle Bin?`)) return;
+    doTrash();
+  }
+
+  function restoreItem(id){
+    const item = items.find(i=>i.id === id);
+    if(!item) return;
+    const ids = collectWithDescendants(id);
+    ids.forEach(tid=>{
+      const it = items.find(i=>i.id===tid);
+      if(it){ it.deleted = false; delete it.deletedAt; }
+    });
+    saveAll();
+    toast("Restored");
+    render();
+  }
+
+  function permanentDelete(id){
+    const item = items.find(i=>i.id === id);
+    if(!item) return;
+
+    const doDelete = ()=>{
+      const ids = collectWithDescendants(id);
+      items = items.filter(i => !ids.has(i.id));
+      ids.forEach(tid => favorites.delete(tid));
+      saveAll();
+      toast("Permanently deleted");
+      render();
+    };
+
+    if(item.type === "folder" && item.password){
+      openPasswordModal("verify", item, doDelete, "This folder is password protected. Enter the password to permanently delete it.");
+      return;
+    }
+    if(!confirm(`Permanently delete "${item.name}"? This cannot be undone.`)) return;
+    doDelete();
+  }
+
+  function emptyTrash(){
+    const trashedRoots = items.filter(i => i.deleted && (i.parentId === null || !isDeleted(i.parentId)));
+    if(trashedRoots.length === 0){ toast("Recycle Bin is already empty"); return; }
+
+    const lockedRoots = trashedRoots.filter(i => i.type === "folder" && i.password);
+    if(lockedRoots.length > 0){
+      toast("Delete password-protected folders individually first");
+      return;
+    }
+    if(!confirm("Permanently delete everything in the Recycle Bin? This cannot be undone.")) return;
+
+    const allDeletedIds = new Set(items.filter(i => i.deleted).map(i => i.id));
+    items = items.filter(i => !i.deleted);
+    allDeletedIds.forEach(id => favorites.delete(id));
+    saveAll();
+    toast("Recycle Bin emptied");
+    render();
+  }
+
+  function updateStorageInfo(){
+    const activeCount = items.filter(i=>!i.deleted).length;
+    const trashCount = items.filter(i=>i.deleted && (i.parentId === null || !isDeleted(i.parentId))).length;
+    storageInfo.textContent = `${activeCount} item${activeCount===1?"":"s"} · ${favorites.size} favorite${favorites.size===1?"":"s"} · ${trashCount} in bin`;
+  }
+
+  function render(){
+    renderBreadcrumbs();
+    renderGrid();
+    updateStorageInfo();
+    document.getElementById("uploadActions").style.display = (currentView === "all") ? "flex" : "none";
+    document.getElementById("trashActions").style.display = (currentView === "trash") ? "flex" : "none";
+  }
+
+  /* ---------- Modal (new folder / rename) ---------- */
+  const modalBackdrop = document.getElementById("modalBackdrop");
+  const modalTitle = document.getElementById("modalTitle");
+  const modalInput = document.getElementById("modalInput");
+  const modalConfirm = document.getElementById("modalConfirm");
+  const modalCancel = document.getElementById("modalCancel");
+  let modalMode = "new-folder";
+  let modalTargetId = null;
+
+  function openNewFolderModal(){
+    modalMode = "new-folder";
+    modalTitle.textContent = "New Folder";
+    modalInput.value = "";
+    modalBackdrop.classList.add("show");
+    setTimeout(()=>modalInput.focus(),50);
+  }
+  function openRenameModal(item){
+    modalMode = "rename";
+    modalTargetId = item.id;
+    modalTitle.textContent = "Rename";
+    modalInput.value = item.name;
+    modalBackdrop.classList.add("show");
+    setTimeout(()=>{modalInput.focus(); modalInput.select();},50);
+  }
+  function closeModal(){
+    modalBackdrop.classList.remove("show");
+  }
+  modalCancel.onclick = closeModal;
+  modalBackdrop.onclick = (e)=>{ if(e.target === modalBackdrop) closeModal(); };
+  modalInput.addEventListener("keydown", e=>{ if(e.key === "Enter") modalConfirm.click(); });
+
+  modalConfirm.onclick = ()=>{
+    const val = modalInput.value.trim();
+    if(!val){ toast("Please enter a name"); return; }
+
+    if(modalMode === "new-folder"){
+      items.push({
+        id: uid(),
+        name: val,
+        type: "folder",
+        parentId: currentFolder,
+        date: Date.now(),
+        starred: false
+      });
+      toast("Folder created");
+    } else if(modalMode === "rename"){
+      const item = items.find(i=>i.id === modalTargetId);
+      if(item){ item.name = val; toast("Renamed"); }
+    }
+    saveAll();
+    closeModal();
+    render();
+  };
+
+  document.getElementById("newFolderBtn").onclick = openNewFolderModal;
+  document.getElementById("emptyTrashBtn").onclick = emptyTrash;
+
+  /* ---------- Password protection ---------- */
+  // Note: this is client-side, browser-only protection meant to prevent
+  // accidental deletion - not real security. Anyone with access to this
+  // browser's storage/console could bypass it.
+  function simpleHash(str){
+    let hash = 0;
+    for(let i=0;i<str.length;i++){
+      hash = ((hash<<5) - hash + str.charCodeAt(i)) | 0;
+    }
+    return hash.toString(36);
+  }
+
+  const passwordModalBackdrop = document.getElementById("passwordModalBackdrop");
+  const passwordModalTitle = document.getElementById("passwordModalTitle");
+  const passwordModalInput = document.getElementById("passwordModalInput");
+  const passwordModalInput2 = document.getElementById("passwordModalInput2");
+  const passwordModalHint = document.getElementById("passwordModalHint");
+  const passwordModalConfirm = document.getElementById("passwordModalConfirm");
+  const passwordModalCancel = document.getElementById("passwordModalCancel");
+
+  let pwMode = null;        // "set" | "remove" | "verify"
+  let pwTargetItem = null;
+  let pwCallback = null;
+
+  function openPasswordModal(mode, item, callback, hintText){
+    pwMode = mode;
+    pwTargetItem = item;
+    pwCallback = callback || null;
+    passwordModalInput.value = "";
+    passwordModalInput2.value = "";
+    passwordModalInput2.style.display = (mode === "set") ? "block" : "none";
+    passwordModalHint.textContent = hintText || "";
+
+    if(mode === "set"){
+      passwordModalTitle.textContent = `Set Password — "${item.name}"`;
+      passwordModalInput.placeholder = "New password";
+      passwordModalConfirm.textContent = "Set Password";
+    } else if(mode === "remove"){
+      passwordModalTitle.textContent = `Remove Password — "${item.name}"`;
+      passwordModalInput.placeholder = "Current password";
+      passwordModalConfirm.textContent = "Remove";
+    } else {
+      passwordModalTitle.textContent = "Password Required";
+      passwordModalInput.placeholder = "Password";
+      passwordModalConfirm.textContent = "Confirm";
+    }
+    passwordModalBackdrop.classList.add("show");
+    setTimeout(()=>passwordModalInput.focus(), 50);
+  }
+
+  function closePasswordModal(){
+    passwordModalBackdrop.classList.remove("show");
+    pwMode = null;
+    pwTargetItem = null;
+    pwCallback = null;
+  }
+
+  passwordModalCancel.onclick = closePasswordModal;
+  passwordModalBackdrop.onclick = (e)=>{ if(e.target === passwordModalBackdrop) closePasswordModal(); };
+  [passwordModalInput, passwordModalInput2].forEach(inp=>{
+    inp.addEventListener("keydown", e=>{ if(e.key === "Enter") passwordModalConfirm.click(); });
+  });
+
+  passwordModalConfirm.onclick = ()=>{
+    const pw1 = passwordModalInput.value;
+    const pw2 = passwordModalInput2.value;
+
+    if(pwMode === "set"){
+      if(!pw1){ toast("Please enter a password"); return; }
+      if(pw1 !== pw2){ toast("Passwords do not match"); return; }
+      pwTargetItem.password = simpleHash(pw1);
+      saveAll();
+      toast("Password set");
+      closePasswordModal();
+      render();
+    } else if(pwMode === "remove"){
+      if(simpleHash(pw1) !== pwTargetItem.password){ toast("Incorrect password"); return; }
+      delete pwTargetItem.password;
+      saveAll();
+      toast("Password removed");
+      closePasswordModal();
+      render();
+    } else if(pwMode === "verify"){
+      if(simpleHash(pw1) !== pwTargetItem.password){ toast("Incorrect password"); return; }
+      const cb = pwCallback;
+      closePasswordModal();
+      if(cb) cb();
+    }
+  };
+
+  /* ---------- Upload handling ---------- */
+  const fileInput = document.getElementById("fileInput");
+  const folderInput = document.getElementById("folderInput");
+
+  // Ensures folders being dropped/browsed always land in the currently open folder,
+  // just like copying files into an open Explorer window.
+  function targetFolderId(){
+    if(currentView !== "all") switchToAllView();
+    return currentFolder;
+  }
+
+  function addFile(f, parentId){
+    items.push({
+      id: uid(),
+      name: f.name,
+      type: "file",
+      parentId: parentId,
+      date: Date.now(),
+      size: f.size,
+      starred: false
+    });
+  }
+
+  function handleFiles(fileList){
+    const parent = targetFolderId();
+    Array.from(fileList).forEach(f=> addFile(f, parent));
+    saveAll();
+    toast(`${fileList.length} file${fileList.length===1?"":"s"} added`);
+    render();
+  }
+
+  // Handles a folder picked via the "Upload Folder" button (webkitdirectory),
+  // recreating the folder structure using each file's webkitRelativePath.
+  function handleFolderFiles(fileList){
+    const parent = targetFolderId();
+    const pathToId = new Map(); // "Sub/Path" -> folder id, scoped under parent
+    let fileCount = 0, folderCount = 0;
+
+    Array.from(fileList).forEach(f=>{
+      const relPath = f.webkitRelativePath || f.name;
+      const parts = relPath.split("/");
+      const fileName = parts.pop();
+      let curParent = parent;
+      let pathKey = "";
+      parts.forEach(part=>{
+        pathKey += "/" + part;
+        if(pathToId.has(pathKey)){
+          curParent = pathToId.get(pathKey);
+        } else {
+          const folder = {
+            id: uid(),
+            name: part,
+            type: "folder",
+            parentId: curParent,
+            date: Date.now(),
+            starred: false
+          };
+          items.push(folder);
+          pathToId.set(pathKey, folder.id);
+          curParent = folder.id;
+          folderCount++;
+        }
+      });
+      addFile({name:fileName, size:f.size}, curParent);
+      fileCount++;
+    });
+
+    saveAll();
+    toast(`Folder added (${fileCount} file${fileCount===1?"":"s"}, ${folderCount} folder${folderCount===1?"":"s"})`);
+    render();
+  }
+
+  fileInput.addEventListener("change", e=>{
+    if(e.target.files.length) handleFiles(e.target.files);
+    fileInput.value = "";
+  });
+  folderInput.addEventListener("change", e=>{
+    if(e.target.files.length) handleFolderFiles(e.target.files);
+    folderInput.value = "";
+  });
+  document.getElementById("uploadBtnMenu").onclick = ()=> fileInput.click();
+  document.getElementById("uploadBtnTop").onclick = ()=> fileInput.click();
+  document.getElementById("uploadFolderBtnMenu").onclick = ()=> folderInput.click();
+  document.getElementById("uploadFolderBtnTop").onclick = ()=> folderInput.click();
+
+  /* Explorer-style drag & drop: drop anywhere on the file area to copy
+     into the currently open folder. No visible drop zone - just a subtle
+     highlight and a small hint while dragging, like a native file manager. */
+  const mainEl = document.querySelector("main");
+  const dropHint = document.getElementById("dropHint");
+  let dragCounter = 0;
+
+  mainEl.addEventListener("dragenter", e=>{
+    e.preventDefault();
+    dragCounter++;
+    mainEl.classList.add("dragover");
+    dropHint.classList.add("show");
+  });
+  mainEl.addEventListener("dragover", e=>{
+    e.preventDefault();
+  });
+  mainEl.addEventListener("dragleave", e=>{
+    dragCounter--;
+    if(dragCounter <= 0){
+      dragCounter = 0;
+      mainEl.classList.remove("dragover");
+      dropHint.classList.remove("show");
+    }
+  });
+  mainEl.addEventListener("drop", e=>{
+    e.preventDefault();
+    dragCounter = 0;
+    mainEl.classList.remove("dragover");
+    dropHint.classList.remove("show");
+    const files = e.dataTransfer.files;
+    if(files && files.length) handleFiles(files);
+  });
+
+  /* ---------- Sidebar menu items (views) ---------- */
+  document.querySelectorAll(".menu-item").forEach(el=>{
+    el.addEventListener("click", ()=>{
+      document.querySelectorAll(".menu-item").forEach(m=>m.classList.remove("active"));
+      el.classList.add("active");
+      currentView = el.dataset.view;
+      if(currentView !== "favorites") currentFolder = currentFolder; // stay put
+      render();
+      closeMobileSidebar();
+    });
+  });
+
+  /* ---------- Sorting ---------- */
+  document.getElementById("sortSelect").addEventListener("change", e=>{
+    sortMode = e.target.value;
+    render();
+  });
+
+  /* ---------- Search ---------- */
+  document.getElementById("searchInput").addEventListener("input", e=>{
+    searchTerm = e.target.value;
+    render();
+  });
+
+  /* ---------- Mobile sidebar toggle ---------- */
+  const sidebar = document.getElementById("sidebar");
+  const overlay = document.getElementById("overlay");
+  const hamburgerBtn = document.getElementById("hamburgerBtn");
+  function openMobileSidebar(){
+    sidebar.classList.add("open");
+    overlay.classList.add("show");
+  }
+  function closeMobileSidebar(){
+    sidebar.classList.remove("open");
+    overlay.classList.remove("show");
+  }
+  hamburgerBtn.onclick = ()=>{
+    if(sidebar.classList.contains("open")) closeMobileSidebar();
+    else openMobileSidebar();
+  };
+  overlay.onclick = closeMobileSidebar;
+
+  /* ---------- Init ---------- */
+  render();
+})();
+</script>
+</body>
+</html>
