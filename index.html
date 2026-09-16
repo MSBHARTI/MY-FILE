@@ -373,6 +373,125 @@
   }
   .toast.show{opacity:1;transform:translateX(-50%) translateY(-6px);}
 
+  /* ---------- Upload/Download progress panel ---------- */
+  .upload-panel{
+    position:fixed;
+    bottom:20px;
+    right:20px;
+    width:300px;
+    max-width:calc(100vw - 32px);
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:12px;
+    box-shadow:var(--shadow);
+    z-index:250;
+    overflow:hidden;
+    display:none;
+  }
+  .upload-panel.show{display:block;}
+  .upload-panel-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:10px 14px;
+    font-size:13px;
+    font-weight:600;
+    border-bottom:1px solid var(--border);
+  }
+  .upload-panel-header button{
+    background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:14px;
+  }
+  .upload-panel-body{max-height:220px;overflow-y:auto;padding:10px 14px;}
+  .upload-row{margin-bottom:12px;}
+  .upload-row:last-child{margin-bottom:2px;}
+  .upload-row .row-top{
+    display:flex;
+    justify-content:space-between;
+    gap:8px;
+    font-size:12px;
+    margin-bottom:4px;
+    color:var(--text-muted);
+  }
+  .upload-row .row-top .fname{
+    color:var(--text);
+    font-weight:500;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .progress-track{height:6px;border-radius:4px;background:var(--bg);overflow:hidden;}
+  .progress-fill{height:100%;background:var(--accent);width:0%;transition:width .15s linear;}
+  .upload-row.done .progress-fill{background:#22c55e;}
+  .upload-row.error .progress-fill{background:var(--danger);}
+
+  /* ---------- Preview modal ---------- */
+  .preview-backdrop{
+    display:none;
+    position:fixed;
+    inset:0;
+    background:rgba(15,18,30,.7);
+    align-items:center;
+    justify-content:center;
+    z-index:400;
+    padding:20px;
+  }
+  .preview-backdrop.show{display:flex;}
+  .preview-box{
+    background:var(--surface);
+    border-radius:12px;
+    max-width:900px;
+    width:100%;
+    max-height:90vh;
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+  }
+  .preview-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:12px 16px;
+    border-bottom:1px solid var(--border);
+    gap:10px;
+  }
+  .preview-header .pname{
+    font-weight:600;
+    font-size:14px;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .preview-header-actions{display:flex;gap:4px;flex-shrink:0;}
+  .preview-header-actions button{
+    background:none;border:none;cursor:pointer;font-size:17px;color:var(--text-muted);
+    padding:4px 8px;border-radius:6px;
+  }
+  .preview-header-actions button:hover{background:var(--bg);color:var(--text);}
+  .preview-body{
+    flex:1;
+    overflow:auto;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:#12141b;
+    min-height:220px;
+  }
+  .preview-body img, .preview-body video{max-width:100%;max-height:78vh;display:block;}
+  .preview-body iframe{width:100%;height:78vh;border:none;background:#fff;}
+  .preview-body pre{
+    color:#e5e7eb;
+    padding:20px;
+    white-space:pre-wrap;
+    word-break:break-word;
+    max-height:78vh;
+    overflow:auto;
+    width:100%;
+    margin:0;
+    font-size:13px;
+  }
+  .preview-fallback{color:#c9ccd6;text-align:center;padding:40px 20px;}
+  .preview-fallback .icon{font-size:48px;margin-bottom:12px;}
+
   input[type=file]{display:none;}
 
   /* ---------- Mobile ---------- */
@@ -488,6 +607,27 @@
 
 <div class="toast" id="toast"></div>
 
+<div class="upload-panel" id="uploadPanel">
+  <div class="upload-panel-header">
+    <span>Transfers</span>
+    <button id="uploadPanelClose" title="Hide">✕</button>
+  </div>
+  <div class="upload-panel-body" id="uploadPanelBody"></div>
+</div>
+
+<div class="preview-backdrop" id="previewBackdrop">
+  <div class="preview-box">
+    <div class="preview-header">
+      <div class="pname" id="previewName"></div>
+      <div class="preview-header-actions">
+        <button id="previewDownloadBtn" title="Download">⬇️</button>
+        <button id="previewCloseBtn" title="Close">✕</button>
+      </div>
+    </div>
+    <div class="preview-body" id="previewBody"></div>
+  </div>
+</div>
+
 <script>
 (function(){
   "use strict";
@@ -534,8 +674,14 @@
     return new Set(items.filter(i=>i.starred).map(i=>i.id));
   }
   function saveAll(){
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-    localStorage.setItem(FAV_KEY, JSON.stringify([...favorites]));
+    try{
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+      localStorage.setItem(FAV_KEY, JSON.stringify([...favorites]));
+      return true;
+    }catch(e){
+      console.error("Storage save failed", e);
+      return false;
+    }
   }
 
   /* ---------- Helpers ---------- */
@@ -564,6 +710,17 @@
       js:"💻", html:"💻", css:"💻", py:"💻", json:"💻"
     };
     return map[ext] || "📄";
+  }
+  function guessMime(name){
+    const ext = (name.split(".").pop() || "").toLowerCase();
+    const map = {
+      pdf:"application/pdf",
+      png:"image/png", jpg:"image/jpeg", jpeg:"image/jpeg", gif:"image/gif", webp:"image/webp", svg:"image/svg+xml",
+      mp4:"video/mp4", mov:"video/quicktime", webm:"video/webm", avi:"video/x-msvideo",
+      txt:"text/plain", md:"text/markdown", csv:"text/csv", json:"application/json",
+      mp3:"audio/mpeg", wav:"audio/wav"
+    };
+    return map[ext] || "application/octet-stream";
   }
   function toast(msg){
     const t = document.getElementById("toast");
@@ -783,6 +940,8 @@
           document.querySelector('.menu-item[data-view="all"]').classList.add("active");
           currentFolder = item.id;
           render();
+        } else {
+          openPreview(item);
         }
       };
 
@@ -817,6 +976,18 @@
     delBtn.onclick = ()=>{ closeAnyDropdown(); moveToTrash(item.id); };
 
     dropdown.appendChild(renameBtn);
+
+    if(item.type === "file"){
+      const previewBtn = document.createElement("button");
+      previewBtn.innerHTML = "👁️ Preview";
+      previewBtn.onclick = ()=>{ closeAnyDropdown(); openPreview(item); };
+      dropdown.appendChild(previewBtn);
+
+      const downloadBtn = document.createElement("button");
+      downloadBtn.innerHTML = "⬇️ Download";
+      downloadBtn.onclick = ()=>{ closeAnyDropdown(); downloadItem(item); };
+      dropdown.appendChild(downloadBtn);
+    }
 
     if(item.type === "folder"){
       const pwBtn = document.createElement("button");
@@ -1116,6 +1287,52 @@
     }
   };
 
+  /* ---------- Transfer progress panel ---------- */
+  const uploadPanel = document.getElementById("uploadPanel");
+  const uploadPanelBody = document.getElementById("uploadPanelBody");
+  document.getElementById("uploadPanelClose").onclick = ()=> uploadPanel.classList.remove("show");
+
+  function addProgressRow(label){
+    uploadPanel.classList.add("show");
+    const row = document.createElement("div");
+    row.className = "upload-row";
+    row.innerHTML = `
+      <div class="row-top"><span class="fname">${escapeHtml(label)}</span><span class="pct">0%</span></div>
+      <div class="progress-track"><div class="progress-fill"></div></div>
+    `;
+    uploadPanelBody.appendChild(row);
+    const fill = row.querySelector(".progress-fill");
+    const pct = row.querySelector(".pct");
+    return {
+      update(p){
+        const clamped = Math.max(0, Math.min(100, Math.round(p)));
+        fill.style.width = clamped + "%";
+        pct.textContent = clamped + "%";
+      },
+      done(label2){
+        fill.style.width = "100%";
+        pct.textContent = label2 || "Done";
+        row.classList.add("done");
+        setTimeout(()=>{ row.remove(); if(!uploadPanelBody.children.length) uploadPanel.classList.remove("show"); }, 1600);
+      },
+      error(msg){
+        pct.textContent = msg || "Failed";
+        row.classList.add("error");
+        setTimeout(()=>{ row.remove(); if(!uploadPanelBody.children.length) uploadPanel.classList.remove("show"); }, 2600);
+      }
+    };
+  }
+
+  function readFileAsDataURL(file, onProgress){
+    return new Promise((resolve, reject)=>{
+      const reader = new FileReader();
+      reader.onprogress = (e)=>{ if(e.lengthComputable) onProgress((e.loaded / e.total) * 100); };
+      reader.onload = ()=> resolve(reader.result);
+      reader.onerror = ()=> reject(reader.error || new Error("Read failed"));
+      reader.readAsDataURL(file);
+    });
+  }
+
   /* ---------- Upload handling ---------- */
   const fileInput = document.getElementById("fileInput");
   const folderInput = document.getElementById("folderInput");
@@ -1127,34 +1344,49 @@
     return currentFolder;
   }
 
-  function addFile(f, parentId){
-    items.push({
-      id: uid(),
-      name: f.name,
-      type: "file",
-      parentId: parentId,
-      date: Date.now(),
-      size: f.size,
-      starred: false
-    });
-  }
-
-  function handleFiles(fileList){
+  async function handleFiles(fileList){
     const parent = targetFolderId();
-    Array.from(fileList).forEach(f=> addFile(f, parent));
-    saveAll();
-    toast(`${fileList.length} file${fileList.length===1?"":"s"} added`);
+    const files = Array.from(fileList);
+    let okCount = 0, failCount = 0;
+
+    for(const f of files){
+      const progress = addProgressRow(f.name);
+      try{
+        const dataUrl = await readFileAsDataURL(f, p => progress.update(p));
+        const item = {
+          id: uid(), name: f.name, type: "file", parentId: parent,
+          date: Date.now(), size: f.size, starred: false,
+          mimeType: f.type || guessMime(f.name), dataUrl
+        };
+        items.push(item);
+        if(saveAll()){
+          okCount++;
+          progress.done();
+        } else {
+          items.pop();
+          failCount++;
+          progress.error("Storage full");
+        }
+      }catch(err){
+        failCount++;
+        progress.error("Failed");
+      }
+    }
+
+    let msg = `${okCount} file${okCount===1?"":"s"} added`;
+    if(failCount) msg += ` — ${failCount} failed (storage full)`;
+    toast(msg);
     render();
   }
 
   // Handles a folder picked via the "Upload Folder" button (webkitdirectory),
   // recreating the folder structure using each file's webkitRelativePath.
-  function handleFolderFiles(fileList){
+  async function handleFolderFiles(fileList){
     const parent = targetFolderId();
     const pathToId = new Map(); // "Sub/Path" -> folder id, scoped under parent
-    let fileCount = 0, folderCount = 0;
+    let fileCount = 0, folderCount = 0, failCount = 0;
 
-    Array.from(fileList).forEach(f=>{
+    for(const f of Array.from(fileList)){
       const relPath = f.webkitRelativePath || f.name;
       const parts = relPath.split("/");
       const fileName = parts.pop();
@@ -1179,12 +1411,33 @@
           folderCount++;
         }
       });
-      addFile({name:fileName, size:f.size}, curParent);
-      fileCount++;
-    });
+
+      const progress = addProgressRow(fileName);
+      try{
+        const dataUrl = await readFileAsDataURL(f, p => progress.update(p));
+        items.push({
+          id: uid(), name: fileName, type: "file", parentId: curParent,
+          date: Date.now(), size: f.size, starred: false,
+          mimeType: f.type || guessMime(fileName), dataUrl
+        });
+        if(saveAll()){
+          fileCount++;
+          progress.done();
+        } else {
+          items.pop();
+          failCount++;
+          progress.error("Storage full");
+        }
+      }catch(err){
+        failCount++;
+        progress.error("Failed");
+      }
+    }
 
     saveAll();
-    toast(`Folder added (${fileCount} file${fileCount===1?"":"s"}, ${folderCount} folder${folderCount===1?"":"s"})`);
+    let msg = `Folder added (${fileCount} file${fileCount===1?"":"s"}, ${folderCount} folder${folderCount===1?"":"s"})`;
+    if(failCount) msg += ` — ${failCount} skipped (storage full)`;
+    toast(msg);
     render();
   }
 
@@ -1200,6 +1453,92 @@
   document.getElementById("uploadBtnTop").onclick = ()=> fileInput.click();
   document.getElementById("uploadFolderBtnMenu").onclick = ()=> folderInput.click();
   document.getElementById("uploadFolderBtnTop").onclick = ()=> folderInput.click();
+
+  /* ---------- Download ---------- */
+  function downloadItem(item){
+    if(!item || item.type !== "file") return;
+    if(!item.dataUrl){
+      toast("No file data available for this item.");
+      return;
+    }
+    const progress = addProgressRow("Downloading " + item.name);
+    let pct = 0;
+    const steps = 10;
+    const stepTime = Math.min(45, Math.max(15, Math.round((item.size || 10000) / 60000)));
+    const timer = setInterval(()=>{
+      pct += 100 / steps;
+      if(pct >= 100){
+        clearInterval(timer);
+        progress.update(100);
+        const a = document.createElement("a");
+        a.href = item.dataUrl;
+        a.download = item.name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        progress.done();
+      } else {
+        progress.update(pct);
+      }
+    }, stepTime);
+  }
+
+  /* ---------- Preview ---------- */
+  const previewBackdrop = document.getElementById("previewBackdrop");
+  const previewName = document.getElementById("previewName");
+  const previewBody = document.getElementById("previewBody");
+  const previewCloseBtn = document.getElementById("previewCloseBtn");
+  const previewDownloadBtn = document.getElementById("previewDownloadBtn");
+  let previewTargetItem = null;
+
+  function openPreview(item){
+    if(!item || item.type !== "file") return;
+    previewTargetItem = item;
+    previewName.textContent = item.name;
+    previewBody.innerHTML = "";
+
+    if(!item.dataUrl){
+      previewBody.innerHTML = `<div class="preview-fallback"><div class="icon">${iconFor(item)}</div><div>No preview available for this item.</div></div>`;
+    } else {
+      const mime = item.mimeType || guessMime(item.name);
+      if(mime.startsWith("image/")){
+        const img = document.createElement("img");
+        img.src = item.dataUrl;
+        previewBody.appendChild(img);
+      } else if(mime.startsWith("video/")){
+        const video = document.createElement("video");
+        video.src = item.dataUrl;
+        video.controls = true;
+        previewBody.appendChild(video);
+      } else if(mime === "application/pdf"){
+        const iframe = document.createElement("iframe");
+        iframe.src = item.dataUrl;
+        previewBody.appendChild(iframe);
+      } else if(mime.startsWith("text/") || mime === "application/json"){
+        try{
+          const base64 = item.dataUrl.split(",")[1];
+          const text = decodeURIComponent(escape(atob(base64)));
+          const pre = document.createElement("pre");
+          pre.textContent = text.slice(0, 20000);
+          previewBody.appendChild(pre);
+        }catch(e){
+          previewBody.innerHTML = `<div class="preview-fallback"><div class="icon">${iconFor(item)}</div><div>Preview not available for this file type.<br>Use Download to open it.</div></div>`;
+        }
+      } else {
+        previewBody.innerHTML = `<div class="preview-fallback"><div class="icon">${iconFor(item)}</div><div>Preview not available for this file type.<br>Use Download to open it.</div></div>`;
+      }
+    }
+    previewBackdrop.classList.add("show");
+  }
+
+  function closePreview(){
+    previewBackdrop.classList.remove("show");
+    previewBody.innerHTML = ""; // stops any playing video
+    previewTargetItem = null;
+  }
+  previewCloseBtn.onclick = closePreview;
+  previewBackdrop.onclick = (e)=>{ if(e.target === previewBackdrop) closePreview(); };
+  previewDownloadBtn.onclick = ()=>{ if(previewTargetItem) downloadItem(previewTargetItem); };
 
   /* Explorer-style drag & drop: drop anywhere on the file area to copy
      into the currently open folder. No visible drop zone - just a subtle
